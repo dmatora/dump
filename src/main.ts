@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+const excludeFiles = ['favicon.ico', '.DS_Store', '.next', 'node_modules'];
+
 function dumpFiles(folderPaths: string[], outputFile: string): void {
   try {
     const writeStream = fs.createWriteStream(outputFile);
@@ -11,6 +13,7 @@ function dumpFiles(folderPaths: string[], outputFile: string): void {
       const items = fs.readdirSync(folderPath);
 
       items.forEach((item, index) => {
+        if (excludeFiles.includes(item)) return;
         const itemPath = path.join(folderPath, item);
         const stats = fs.statSync(itemPath);
 
