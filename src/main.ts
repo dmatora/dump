@@ -1,7 +1,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const excludeFiles = ['favicon.ico', '.DS_Store', '.next', 'node_modules'];
+const excludeFiles = [
+  '.DS_Store',
+  '.next',
+  '.git',
+  '.gen',
+  '.env',
+  '.idea',
+  'node_modules',
+  'package-lock.json',
+  'yarn-lock.json',
+  'pnpm-lock.yaml',
+];
+const excludeExtensions = ['.jpg', '.jpeg', '.png', '.ico', '.svg', '.woff2']; // Add more extensions as needed
 
 function dumpFiles(folderPaths: string[], outputFile: string): void {
   try {
@@ -20,6 +32,8 @@ function dumpFiles(folderPaths: string[], outputFile: string): void {
         if (stats.isDirectory()) {
           processFolder(itemPath, indent + '  ');
         } else if (stats.isFile()) {
+          const ext = path.extname(item).toLowerCase();
+          if (excludeExtensions.includes(ext)) return;
           writeStream.write(`${indent}## ${item}\n\n`);
           writeStream.write(`${indent}\`\`\`\n`);
           const content = fs.readFileSync(itemPath, 'utf8');
