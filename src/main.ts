@@ -15,42 +15,28 @@ const excludeFiles = [
 ];
 const excludeExtensions = ['.jpg', '.jpeg', '.png', '.ico', '.svg', '.woff2']; // Add more extensions as needed
 
-function dumpFiles(folderPaths: string[], outputFile: string): void {
+function dumpFiles(paths: string[], outputFile: string): void {
   try {
     const writeStream = fs.createWriteStream(outputFile);
 
-    function processFolder(folderPath: string, indent = ''): void {
-      writeStream.write(`${indent}# Folder: ${folderPath}\n\n`);
+    paths.forEach((p, index) => {
+      const stats = fs.statSync(p);
+      if (stats.isDirectory()) {
+        writeStream.write(`# Folder: ${p}\n\n`);
+        processFolderContents(p, 1, writeStream);
+      } else if (stats.isFile()) {
+        const fileName = path.basename(p);
+        if (excludeFiles.includes(fileName)) return;
+        const ext = path.extname(fileName).toLowerCase();
+        if (excludeExtensions.includes(ext)) return;
+        writeStream.write(`# File: ${p}\n\n`);
+        writeStream.write(`\`\`\`\n`);
+        const content = fs.readFileSync(p, 'utf8');
+        writeStream.write(content);
+        writeStream.write(`\n\`\`\`\n\n`);
+      }
 
-      const items = fs.readdirSync(folderPath);
-
-      items.forEach((item, index) => {
-        if (excludeFiles.includes(item)) return;
-        const itemPath = path.join(folderPath, item);
-        const stats = fs.statSync(itemPath);
-
-        if (stats.isDirectory()) {
-          processFolder(itemPath, indent + '  ');
-        } else if (stats.isFile()) {
-          const ext = path.extname(item).toLowerCase();
-          if (excludeExtensions.includes(ext)) return;
-          writeStream.write(`${indent}## ${item}\n\n`);
-          writeStream.write(`${indent}\`\`\`\n`);
-          const content = fs.readFileSync(itemPath, 'utf8');
-          writeStream.write(content);
-          writeStream.write(`\n${indent}\`\`\`\n\n`);
-
-          if (index < items.length - 1) {
-            writeStream.write('\n');
-          }
-        }
-      });
-    }
-
-    folderPaths.forEach((folderPath, folderIndex) => {
-      processFolder(folderPath);
-
-      if (folderIndex < folderPaths.length - 1) {
+      if (index < paths.length - 1) {
         writeStream.write('\n');
       }
     });
@@ -62,6 +48,35 @@ function dumpFiles(folderPaths: string[], outputFile: string): void {
   }
 }
 
-const folderPaths = ['src'];
+function processFolderContents(
+  folderPath: string,
+  depth: number,
+  writeStream: fs.WriteStream
+): void {
+  const items = fs.readdirSync(folderPath);
+  const headerLevel = '#'.repeat(depth + 1); // Starts with ## for depth=1
+
+  items.forEach((item) => {
+    if (excludeFiles.includes(item)) return;
+    const itemPath = path.join(folderPath, item);
+    const stats = fs.statSync(itemPath);
+
+    if (stats.isDirectory()) {
+      writeStream.write(`${headerLevel} ${item}\n\n`);
+      processFolderContents(itemPath, depth + 1, writeStream);
+    } else if (stats.isFile()) {
+      const ext = path.extname(item).toLowerCase();
+      if (excludeExtensions.includes(ext)) return;
+      writeStream.write(`${headerLevel} ${item}\n\n`);
+      writeStream.write(`\`\`\`\n`);
+      const content = fs.readFileSync(itemPath, 'utf8');
+      writeStream.write(content);
+      writeStream.write(`\n\`\`\`\n\n`);
+    }
+  });
+}
+
+// Example usage
+const paths = ['src'];
 const outputFile = 'project_files.md';
-dumpFiles(folderPaths, outputFile);
+dumpFiles(paths, outputFile);
