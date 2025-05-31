@@ -4,16 +4,38 @@ import * as path from 'path';
 const excludeFiles = [
   '.DS_Store',
   '.next',
+  '.nx',
   '.git',
   '.gen',
   '.env',
   '.idea',
+  '.vscode',
+  '.yarn',
+  'dist',
+  'update.sh',
   'node_modules',
   'package-lock.json',
   'yarn-lock.json',
   'pnpm-lock.yaml',
+  'composer.lock',
 ];
-const excludeExtensions = ['.jpg', '.jpeg', '.png', '.ico', '.svg', '.woff2'];
+const excludeExtensions = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.ico',
+  '.avif',
+  '.webp',
+  '.bcmap',
+  '.svg',
+  '.ttf',
+  '.woff',
+  '.woff2',
+  '.eot',
+  '.mp3',
+  '.zip',
+  '.db',
+];
 
 interface OutputFile {
   stream: fs.WriteStream;
@@ -196,9 +218,7 @@ function processFolderContents(
 }
 
 // Example usage
-const paths = [
-  'src'
-];
+const paths = ['src'];
 const outputFile = 'project_files.md';
 const maxTokens = 5000000; // 900K characters limit
 
