@@ -13,48 +13,146 @@ const excludeFiles = [
   'yarn-lock.json',
   'pnpm-lock.yaml',
 ];
-const excludeExtensions = ['.jpg', '.jpeg', '.png', '.ico', '.svg', '.woff2']; // Add more extensions as needed
+const excludeExtensions = ['.jpg', '.jpeg', '.png', '.ico', '.svg', '.woff2'];
 
-function dumpFiles(paths: string[], outputFile: string): void {
+interface OutputFile {
+  stream: fs.WriteStream;
+  size: number;
+  index: number;
+  filename: string;
+}
+
+function dumpFiles(
+  paths: string[],
+  outputFile: string,
+  maxTokens?: number
+): void {
   try {
-    const writeStream = fs.createWriteStream(outputFile);
+    const maxFileSize = maxTokens || Infinity;
+    let currentFile = createNewOutputFile(outputFile, 0);
 
     paths.forEach((p, index) => {
       const stats = fs.statSync(p);
       if (stats.isDirectory()) {
-        writeStream.write(`# Folder: ${p}\n\n`);
-        processFolderContents(p, 1, writeStream);
+        const folderHeader = `# Folder: ${p}\n\n`;
+        currentFile = writeWithSizeCheck(
+          currentFile,
+          folderHeader,
+          outputFile,
+          maxFileSize
+        );
+        currentFile = processFolderContents(
+          p,
+          1,
+          currentFile,
+          outputFile,
+          maxFileSize
+        );
       } else if (stats.isFile()) {
         const fileName = path.basename(p);
         if (excludeFiles.includes(fileName)) return;
         const ext = path.extname(fileName).toLowerCase();
         if (excludeExtensions.includes(ext)) return;
-        writeStream.write(`# File: ${p}\n\n`);
-        writeStream.write(`\`\`\`\n`);
+
+        const fileHeader = `# File: ${p}\n\n`;
         const content = fs.readFileSync(p, 'utf8');
-        writeStream.write(content);
-        writeStream.write(`\n\`\`\`\n\n`);
+        const fileContent = `\`\`\`\n${content}\n\`\`\`\n\n`;
+        const totalContent = fileHeader + fileContent;
+
+        currentFile = writeWithSizeCheck(
+          currentFile,
+          totalContent,
+          outputFile,
+          maxFileSize
+        );
       }
 
       if (index < paths.length - 1) {
-        writeStream.write('\n');
+        currentFile = writeWithSizeCheck(
+          currentFile,
+          '\n',
+          outputFile,
+          maxFileSize
+        );
       }
     });
 
-    writeStream.end();
-    console.log(`Files have been dumped to ${outputFile}`);
+    currentFile.stream.end();
+
+    const totalFiles = currentFile.index + 1;
+    console.log(`Files have been dumped to ${totalFiles} file(s):`);
+    for (let i = 0; i <= currentFile.index; i++) {
+      const filename = getOutputFileName(outputFile, i);
+      const stats = fs.statSync(filename);
+      console.log(`  ${filename} (${Math.round(stats.size / 1024)}KB)`);
+    }
   } catch (error) {
     console.error('An error occurred:', error);
   }
 }
 
+function getOutputFileName(baseOutputFile: string, index: number): string {
+  if (index === 0) return baseOutputFile;
+
+  const ext = path.extname(baseOutputFile);
+  const baseName = path.basename(baseOutputFile, ext);
+  const dir = path.dirname(baseOutputFile);
+
+  return path.join(dir, `${baseName}_part${index + 1}${ext}`);
+}
+
+function createNewOutputFile(
+  baseOutputFile: string,
+  index: number
+): OutputFile {
+  const filename = getOutputFileName(baseOutputFile, index);
+  const stream = fs.createWriteStream(filename);
+
+  console.log(`Creating output file: ${filename}`);
+
+  return {
+    stream,
+    size: 0,
+    index,
+    filename,
+  };
+}
+
+function writeWithSizeCheck(
+  currentFile: OutputFile,
+  content: string,
+  baseOutputFile: string,
+  maxFileSize: number
+): OutputFile {
+  const contentSize = Buffer.byteLength(content, 'utf8');
+
+  // If adding this content would exceed the limit and we already have content,
+  // start a new file. We don't split individual files across multiple outputs.
+  if (currentFile.size + contentSize > maxFileSize && currentFile.size > 0) {
+    console.log(
+      `File ${currentFile.filename} reached size limit (${Math.round(
+        currentFile.size / 1024
+      )}KB), starting new file...`
+    );
+    currentFile.stream.end();
+    currentFile = createNewOutputFile(baseOutputFile, currentFile.index + 1);
+  }
+
+  currentFile.stream.write(content);
+  currentFile.size += contentSize;
+
+  return currentFile;
+}
+
 function processFolderContents(
   folderPath: string,
   depth: number,
-  writeStream: fs.WriteStream
-): void {
+  currentFile: OutputFile,
+  baseOutputFile: string,
+  maxFileSize: number
+): OutputFile {
   const items = fs.readdirSync(folderPath);
-  const headerLevel = '#'.repeat(depth + 1); // Starts with ## for depth=1
+  const headerLevel = '#'.repeat(depth + 1);
 
   items.forEach((item) => {
     if (excludeFiles.includes(item)) return;
@@ -62,21 +160,46 @@ function processFolderContents(
     const stats = fs.statSync(itemPath);
 
     if (stats.isDirectory()) {
-      writeStream.write(`${headerLevel} ${item}\n\n`);
-      processFolderContents(itemPath, depth + 1, writeStream);
+      const dirHeader = `${headerLevel} ${item}\n\n`;
+      currentFile = writeWithSizeCheck(
+        currentFile,
+        dirHeader,
+        baseOutputFile,
+        maxFileSize
+      );
+      currentFile = processFolderContents(
+        itemPath,
+        depth + 1,
+        currentFile,
+        baseOutputFile,
+        maxFileSize
+      );
     } else if (stats.isFile()) {
       const ext = path.extname(item).toLowerCase();
       if (excludeExtensions.includes(ext)) return;
-      writeStream.write(`${headerLevel} ${item}\n\n`);
-      writeStream.write(`\`\`\`\n`);
+
+      const fileHeader = `${headerLevel} ${item}\n\n`;
       const content = fs.readFileSync(itemPath, 'utf8');
-      writeStream.write(content);
-      writeStream.write(`\n\`\`\`\n\n`);
+      const fileContent = `\`\`\`\n${content}\n\`\`\`\n\n`;
+      const totalContent = fileHeader + fileContent;
+
+      currentFile = writeWithSizeCheck(
+        currentFile,
+        totalContent,
+        baseOutputFile,
+        maxFileSize
+      );
     }
   });
+
+  return currentFile;
 }
 
 // Example usage
-const paths = ['src'];
+const paths = [
+  'src'
+];
 const outputFile = 'project_files.md';
-dumpFiles(paths, outputFile);
+const maxTokens = 5000000; // 900K characters limit
+
+dumpFiles(paths, outputFile, maxTokens);
